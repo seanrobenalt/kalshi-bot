@@ -5,6 +5,7 @@ Minimal Rust bot that:
 - Trades **crypto 15-minute** markets (BTC/ETH/SOL by default)
 - Filters for **15-minute intervals** (regex-based)
 - Buys both YES and NO when the **combined ask price < $1**
+- Additional fast-close buy: if **time to close < 60s** and **either YES or NO is in the 0.90–0.97 band**, it buys even if the combined price is >= `COMBINED_MAX_PRICE`
 
 This is live-ready (Kalshi Trade API v2) and supports dry runs against live markets.
 
@@ -63,6 +64,7 @@ Without credentials, the mock client runs and no markets are loaded.
 
 - This bot only places **buy** orders.
 - Ensure your `COMBINED_MAX_PRICE` leaves room for fees.
+- Fast-close band logic: if a market is within 60 seconds of close and either side is priced in the 0.90–0.97 band, it will place the buys regardless of `COMBINED_MAX_PRICE`.
 - Start with `DRY_RUN=true` to validate selection logic.
 
 ## Simple Deployment (GitHub Actions)
