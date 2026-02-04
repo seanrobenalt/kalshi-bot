@@ -79,13 +79,31 @@ Add:
 - `KALSHI_PRIVATE_KEY_PEM` (paste the full PEM contents)
 - `SLACK_WEBHOOK_URL` (optional; for Slack output)
 
-### 2) Commit the workflow
+### 2) Add the workflow
 
-This repo includes `.github/workflows/kalshi-bot.yml` which:
+Example `.github/workflows/kalshi-bot.yml`:
 
-- Runs every 5 minutes
-- Uses your secrets for auth
-- Posts Slack summaries if `SLACK_WEBHOOK_URL` is set
+```yaml
+name: Kalshi 15m Bot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      KALSHI_API_KEY: ${{ secrets.KALSHI_API_KEY }}
+      KALSHI_PRIVATE_KEY_PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      DRY_RUN: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo run --release
+```
 
 ### 3) Adjust run settings (optional)
 
