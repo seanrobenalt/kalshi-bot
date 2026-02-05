@@ -72,7 +72,9 @@ pub fn pick_opportunities(config: &Config, now: DateTime<Utc>, markets: Vec<Mark
         };
 
         let combined = yes_price + no_price;
-        let price_in_band = (0.90..=0.97).contains(&yes_price) || (0.90..=0.97).contains(&no_price);
+        let yes_in_band = (0.90..=0.97).contains(&yes_price);
+        let no_in_band = (0.90..=0.97).contains(&no_price);
+        let price_in_band = yes_in_band || no_in_band;
         let qualifies_fast = seconds_to_close < 60 && price_in_band;
 
         if !qualifies_fast && combined >= config.combined_max_price {
@@ -85,24 +87,45 @@ pub fn pick_opportunities(config: &Config, now: DateTime<Utc>, markets: Vec<Mark
             continue;
         }
 
-        let orders = vec![
-            OrderRequest {
-                ticker: market.ticker.clone(),
-                side: Side::Yes,
-                price_dollars: yes_price,
-                quantity: config.order_count,
-            },
-            OrderRequest {
-                ticker: market.ticker.clone(),
-                side: Side::No,
-                price_dollars: no_price,
-                quantity: config.order_count,
-            },
-        ];
+        let orders = if qualifies_fast {
+            let mut fast_orders = Vec::new();
+            if yes_in_band {
+                fast_orders.push(OrderRequest {
+                    ticker: market.ticker.clone(),
+                    side: Side::Yes,
+                    price_dollars: yes_price,
+                    quantity: config.order_count,
+                });
+            }
+            if no_in_band {
+                fast_orders.push(OrderRequest {
+                    ticker: market.ticker.clone(),
+                    side: Side::No,
+                    price_dollars: no_price,
+                    quantity: config.order_count,
+                });
+            }
+            fast_orders
+        } else {
+            vec![
+                OrderRequest {
+                    ticker: market.ticker.clone(),
+                    side: Side::Yes,
+                    price_dollars: yes_price,
+                    quantity: config.order_count,
+                },
+                OrderRequest {
+                    ticker: market.ticker.clone(),
+                    side: Side::No,
+                    price_dollars: no_price,
+                    quantity: config.order_count,
+                },
+            ]
+        };
 
         let reason = if qualifies_fast {
             format!(
-                "TTL {}s with YES {:.4} / NO {:.4} in 0.90-0.97 band",
+                "TTL {}s with YES {:.4} / NO {:.4} in 0.90-0.97 band (single-side)",
                 seconds_to_close, yes_price, no_price
             )
         } else {
