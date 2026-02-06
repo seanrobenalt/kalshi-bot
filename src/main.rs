@@ -34,6 +34,14 @@ fn main() -> Result<()> {
         }
         if log.contains("Error:") {
             header.push_str("\nResult: ERROR");
+            let error_lines = extract_error_lines(&log, 6);
+            if !error_lines.is_empty() {
+                header.push_str("\n\n*Error Details*");
+                for line in error_lines {
+                    header.push_str("\n- ");
+                    header.push_str(&line);
+                }
+            }
         } else {
             header.push_str("\nResult: OK");
         }
@@ -101,6 +109,38 @@ fn extract_opportunities(log: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_error_lines(log: &str, max_lines: usize) -> Vec<String> {
+    let lines: Vec<&str> = log.lines().collect();
+    let mut start_idx: Option<usize> = None;
+    for (idx, line) in lines.iter().enumerate() {
+        if line.starts_with("Error:") {
+            start_idx = Some(idx);
+        }
+    }
+
+    let Some(start) = start_idx else { return Vec::new(); };
+    let mut collected = Vec::new();
+    for line in lines.iter().skip(start) {
+        if collected.is_empty() {
+            collected.push((*line).to_string());
+            continue;
+        }
+
+        if line.starts_with("  ") {
+            collected.push((*line).to_string());
+        } else {
+            break;
+        }
+    }
+
+    if collected.len() > max_lines {
+        collected.truncate(max_lines);
+        collected.push("...".to_string());
+    }
+
+    collected
 }
 
 fn format_highlights(log: &str, max_items: usize) -> String {
