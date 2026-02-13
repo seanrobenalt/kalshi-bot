@@ -1,3 +1,4 @@
+mod cex;
 mod client;
 mod config;
 mod logger;
@@ -6,10 +7,11 @@ mod slack;
 mod strategy;
 
 use anyhow::{anyhow, Result};
+use cex::scan_btc_eth_references;
 use client::{KalshiClient, LiveClient, MockClient};
+use config::Config;
 use logger::collected_log;
 use logger::init_logger;
-use config::Config;
 
 fn main() -> Result<()> {
     dotenvy::dotenv().ok();
@@ -64,7 +66,9 @@ fn main() -> Result<()> {
 fn run_with_config(config: &Config) -> Result<()> {
     if config.dry_run {
         log_out!("Running in DRY_RUN mode.");
-        if !config.api_key.is_empty() && (config.private_key_pem.is_some() || config.private_key_path.is_some()) {
+        if !config.api_key.is_empty()
+            && (config.private_key_pem.is_some() || config.private_key_path.is_some())
+        {
             let client = LiveClient::new(config.clone())?;
             run(client, config)?;
             return Ok(());
@@ -120,7 +124,9 @@ fn extract_error_lines(log: &str, max_lines: usize) -> Vec<String> {
         }
     }
 
-    let Some(start) = start_idx else { return Vec::new(); };
+    let Some(start) = start_idx else {
+        return Vec::new();
+    };
     let mut collected = Vec::new();
     for line in lines.iter().skip(start) {
         if collected.is_empty() {
@@ -205,7 +211,10 @@ fn format_highlights(log: &str, max_items: usize) -> String {
                 if info.is_empty() {
                     highlights.push_str(&format!("\n- *{}* ({}) — *{}*", title, ticker, reason));
                 } else {
-                    highlights.push_str(&format!("\n- *{}* ({}) — {} — *{}*", title, ticker, info, reason));
+                    highlights.push_str(&format!(
+                        "\n- *{}* ({}) — {} — *{}*",
+                        title, ticker, info, reason
+                    ));
                 }
                 count += 1;
                 if count >= max_items {
@@ -238,7 +247,10 @@ fn format_highlights(log: &str, max_items: usize) -> String {
                 if info.is_empty() {
                     highlights.push_str(&format!("\n- *{}* ({}) — *{}*", title, ticker, reason));
                 } else {
-                    highlights.push_str(&format!("\n- *{}* ({}) — {} — *{}*", title, ticker, info, reason));
+                    highlights.push_str(&format!(
+                        "\n- *{}* ({}) — {} — *{}*",
+                        title, ticker, info, reason
+                    ));
                 }
                 count += 1;
                 if count >= max_items {
@@ -276,6 +288,35 @@ fn format_ttl(seconds: i64) -> String {
 
 fn run<C: KalshiClient>(client: C, config: &Config) -> Result<()> {
     let now = client.now();
+    let cex_refs = if config.enable_cex_lag_scan {
+        match scan_btc_eth_references(config.cex_lag_min_sources) {
+            Ok(map) => {
+                for reference in map.values() {
+                    let venues = reference
+                        .quotes
+                        .iter()
+                        .map(|q| format!("{}:{:.2}", q.venue, q.mid))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    log_err!(
+                        "CEX ref {} {:.2} from {} venues [{}]",
+                        reference.asset,
+                        reference.reference_price,
+                        reference.quotes.len(),
+                        venues
+                    );
+                }
+                Some(map)
+            }
+            Err(err) => {
+                log_err!("CEX price scan failed: {}", err);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     log_err!("Fetching markets...");
     let markets = client.list_markets()?;
 
@@ -284,7 +325,7 @@ fn run<C: KalshiClient>(client: C, config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    let decisions = strategy::pick_opportunities(config, now, markets);
+    let decisions = strategy::pick_opportunities(config, now, markets, cex_refs.as_ref());
     log_err!("Opportunities found: {}", decisions.len());
 
     if decisions.is_empty() {

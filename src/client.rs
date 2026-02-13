@@ -1,6 +1,7 @@
 use std::fs;
 
 use anyhow::{anyhow, Context, Result};
+use base64::Engine;
 use chrono::{DateTime, Utc};
 use rand::thread_rng;
 use reqwest::blocking::{Client as HttpClient, Response};
@@ -8,11 +9,10 @@ use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use rsa::pkcs1::DecodeRsaPrivateKey;
 use rsa::pkcs8::DecodePrivateKey;
 use rsa::pss::SigningKey;
-use rsa::RsaPrivateKey;
 use rsa::signature::{RandomizedSigner, SignatureEncoding};
+use rsa::RsaPrivateKey;
 use serde::Deserialize;
 use sha2::Sha256;
-use base64::Engine;
 
 use crate::config::Config;
 use crate::log_err;
@@ -105,7 +105,10 @@ impl KalshiClient for MockClient {
     }
 
     fn place_order(&self, order: &OrderRequest) -> Result<OrderResponse> {
-        let order_id = format!("dry-{}-{:?}-{}", order.ticker, order.side, order.price_dollars);
+        let order_id = format!(
+            "dry-{}-{:?}-{}",
+            order.ticker, order.side, order.price_dollars
+        );
         Ok(OrderResponse { order_id })
     }
 
@@ -140,14 +143,28 @@ impl LiveClient {
         let signature_b64 = base64::engine::general_purpose::STANDARD.encode(signature.to_vec());
 
         let mut headers = HeaderMap::new();
-        headers.insert("KALSHI-ACCESS-KEY", HeaderValue::from_str(&self.config.api_key)?);
-        headers.insert("KALSHI-ACCESS-TIMESTAMP", HeaderValue::from_str(&timestamp)?);
-        headers.insert("KALSHI-ACCESS-SIGNATURE", HeaderValue::from_str(&signature_b64)?);
+        headers.insert(
+            "KALSHI-ACCESS-KEY",
+            HeaderValue::from_str(&self.config.api_key)?,
+        );
+        headers.insert(
+            "KALSHI-ACCESS-TIMESTAMP",
+            HeaderValue::from_str(&timestamp)?,
+        );
+        headers.insert(
+            "KALSHI-ACCESS-SIGNATURE",
+            HeaderValue::from_str(&signature_b64)?,
+        );
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         Ok(headers)
     }
 
-    fn send_signed(&self, method: &str, path: &str, body: Option<serde_json::Value>) -> Result<Response> {
+    fn send_signed(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<Response> {
         let full_path = format!("{}{}", self.config.api_prefix, path);
         let url = format!("{}{}", self.config.base_url, full_path);
         let headers = self.sign_headers(method, &full_path)?;
@@ -199,9 +216,11 @@ impl KalshiClient for LiveClient {
         });
 
         if side == "yes" {
-            body["yes_price_dollars"] = serde_json::Value::String(format!("{:.4}", order.price_dollars));
+            body["yes_price_dollars"] =
+                serde_json::Value::String(format!("{:.4}", order.price_dollars));
         } else {
-            body["no_price_dollars"] = serde_json::Value::String(format!("{:.4}", order.price_dollars));
+            body["no_price_dollars"] =
+                serde_json::Value::String(format!("{:.4}", order.price_dollars));
         }
 
         let response = self.send_signed("POST", "/portfolio/orders", Some(body))?;
@@ -222,9 +241,13 @@ impl KalshiClient for LiveClient {
             order_id: String,
         }
 
-        let payload: CreateOrderResponse = response.json().context("failed to parse create order response")?;
+        let payload: CreateOrderResponse = response
+            .json()
+            .context("failed to parse create order response")?;
         if let Some(order) = payload.order {
-            return Ok(OrderResponse { order_id: order.order_id });
+            return Ok(OrderResponse {
+                order_id: order.order_id,
+            });
         }
         if let Some(order_id) = payload.order_id {
             return Ok(OrderResponse { order_id });
@@ -291,8 +314,16 @@ impl LiveClient {
         );
 
         for entry in matched {
-            let series_title = entry.title.clone().unwrap_or_else(|| "untitled".to_string());
-            log_err!("Series {} [{}] {}", entry.ticker, entry.category.clone().unwrap_or_default(), series_title);
+            let series_title = entry
+                .title
+                .clone()
+                .unwrap_or_else(|| "untitled".to_string());
+            log_err!(
+                "Series {} [{}] {}",
+                entry.ticker,
+                entry.category.clone().unwrap_or_default(),
+                series_title
+            );
             markets.extend(self.list_markets_for_series(&entry.ticker)?);
         }
 
@@ -376,7 +407,9 @@ impl LiveClient {
                 return Err(anyhow!("get markets failed: {}", response.status()));
             }
 
-            let payload: MarketsResponse = response.json().context("failed to parse markets response")?;
+            let payload: MarketsResponse = response
+                .json()
+                .context("failed to parse markets response")?;
             markets.extend(payload.markets);
             cursor = payload.cursor.or(payload.next_cursor);
             if cursor.as_deref().unwrap_or("").is_empty() {
@@ -400,13 +433,19 @@ impl LiveClient {
                 path.push_str(cursor_val);
             }
 
-            log_err!("Fetching markets page {} (cursor={})", page, cursor.as_deref().unwrap_or("none"));
+            log_err!(
+                "Fetching markets page {} (cursor={})",
+                page,
+                cursor.as_deref().unwrap_or("none")
+            );
             let response = self.send_signed("GET", &path, None)?;
             if !response.status().is_success() {
                 return Err(anyhow!("get markets failed: {}", response.status()));
             }
 
-            let payload: MarketsResponse = response.json().context("failed to parse markets response")?;
+            let payload: MarketsResponse = response
+                .json()
+                .context("failed to parse markets response")?;
             markets.extend(payload.markets);
             cursor = payload.cursor.or(payload.next_cursor);
             if cursor.as_deref().unwrap_or("").is_empty() {
@@ -449,7 +488,11 @@ impl LiveClient {
                 }
 
                 if series_ticker.is_empty() {
-                    log_err!("Fetching events page {} (cursor={})", page, cursor.as_deref().unwrap_or("none"));
+                    log_err!(
+                        "Fetching events page {} (cursor={})",
+                        page,
+                        cursor.as_deref().unwrap_or("none")
+                    );
                 } else {
                     log_err!(
                         "Fetching events for series {} page {} (cursor={})",
@@ -463,7 +506,8 @@ impl LiveClient {
                     return Err(anyhow!("get events failed: {}", response.status()));
                 }
 
-                let payload: EventsResponse = response.json().context("failed to parse events response")?;
+                let payload: EventsResponse =
+                    response.json().context("failed to parse events response")?;
                 for event in payload.events {
                     if is_target_event(&event.event_ticker, &self.config.event_ticker_prefixes)
                         || is_crypto_text(&event.title, &self.config.crypto_assets)
@@ -482,7 +526,10 @@ impl LiveClient {
                         log_err!(
                             "Crypto event: {} [{}] {}",
                             event.event_ticker,
-                            event.category.clone().unwrap_or_else(|| "uncategorized".to_string()),
+                            event
+                                .category
+                                .clone()
+                                .unwrap_or_else(|| "uncategorized".to_string()),
                             event.title
                         );
                         markets.extend(event.markets);
@@ -543,7 +590,9 @@ fn canonical_frequency(value: &str) -> String {
     }
     let v = v.replace('-', "_").replace(' ', "_");
     match v.as_str() {
-        "15m" | "15min" | "15mins" | "15_min" | "15_mins" | "15minutes" | "15_minutes" => "fifteen_min".to_string(),
+        "15m" | "15min" | "15mins" | "15_min" | "15_mins" | "15minutes" | "15_minutes" => {
+            "fifteen_min".to_string()
+        }
         "fifteenmin" | "fifteen_mins" => "fifteen_min".to_string(),
         _ => v,
     }
@@ -565,7 +614,8 @@ fn load_private_key(config: &Config) -> Result<RsaPrivateKey> {
     }
 
     if let Some(path) = &config.private_key_path {
-        let pem = fs::read_to_string(path).with_context(|| format!("failed to read private key at {:?}", path))?;
+        let pem = fs::read_to_string(path)
+            .with_context(|| format!("failed to read private key at {:?}", path))?;
         let normalized = normalize_pem(&pem);
         if let Ok(key) = RsaPrivateKey::from_pkcs8_pem(&normalized) {
             return Ok(key);
@@ -575,7 +625,9 @@ fn load_private_key(config: &Config) -> Result<RsaPrivateKey> {
         return Ok(key);
     }
 
-    Err(anyhow!("missing KALSHI_PRIVATE_KEY_PEM or KALSHI_PRIVATE_KEY_PATH"))
+    Err(anyhow!(
+        "missing KALSHI_PRIVATE_KEY_PEM or KALSHI_PRIVATE_KEY_PATH"
+    ))
 }
 
 fn normalize_pem(raw: &str) -> String {

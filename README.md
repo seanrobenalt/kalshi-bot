@@ -58,6 +58,10 @@ Without credentials, the mock client runs and no markets are loaded.
 - `SERIES_FREQUENCY` (default: `fifteen_min`)
 - `EVENTS_LIMIT` (default: `200`) page size for events discovery
 - `LOG_DECISIONS` (default: `false`) prints per-market qualification metrics and skip reasons
+- `ENABLE_CEX_LAG_SCAN` (default: `true`) scans BTC/ETH spot mids on Coinbase/Kraken/Binance
+- `CEX_LAG_MIN_SOURCES` (default: `2`) minimum exchange quotes required per asset
+- `CEX_LAG_THRESHOLD` (default: `0.08`) minimum absolute lag for a "strong" signal
+- `CEX_LAG_REQUIRE_SIGNAL` (default: `false`) if true, skip markets without lag >= threshold
 - `SLACK_WEBHOOK_URL` (optional) posts a formatted run summary to Slack
 
 ## Notes
@@ -65,6 +69,7 @@ Without credentials, the mock client runs and no markets are loaded.
 - This bot only places **buy** orders.
 - Ensure your `COMBINED_MAX_PRICE` leaves room for fees.
 - Fast-close band logic: if a market is within 60 seconds of close and either side is priced in the 0.90–0.97 band, it will place a buy for the in-band side regardless of `COMBINED_MAX_PRICE`.
+- CEX lag scan supports BTC/ETH only. SOL markets remain tradable, but no CEX lag signal is computed for SOL.
 - Start with `DRY_RUN=true` to validate selection logic.
 
 ## Simple Deployment (GitHub Actions)

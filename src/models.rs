@@ -38,6 +38,17 @@ pub struct OrderResponse {
 }
 
 impl Market {
+    pub fn primary_asset(&self) -> Option<&'static str> {
+        let haystack = self.haystack();
+        if haystack.contains("btc") || haystack.contains("bitcoin") {
+            return Some("BTC");
+        }
+        if haystack.contains("eth") || haystack.contains("ethereum") {
+            return Some("ETH");
+        }
+        None
+    }
+
     pub fn is_btc_related(&self) -> bool {
         let haystack = self.haystack();
         haystack.contains("btc") || haystack.contains("bitcoin")
